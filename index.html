@@ -204,10 +204,14 @@ const CONFIG = {
     // VXTwitter API.
     X_API: "https://api.vxtwitter.com",
 
-    // اختياري: نسخة Cobalt خاصة بك.
-    // مثال: "https://downloader.example.com/api"
-    // اتركه فارغاً إذا لم يكن لديك سيرفر Cobalt.
-    COBALT_ENDPOINT: ""
+    // نسخة Cobalt الخاصة بك (السيرفر اللي راح تنشره من مجلد backend/).
+    // بعد النشر غيّر هذا الرابط لدومين سيرفرك الفعلي، بدون / في النهاية.
+    // مثال: "https://dyrexr-api.onrender.com/api"
+    COBALT_ENDPOINT: "https://YOUR-DOMAIN.example.com/api",
+
+    // نفس المفتاح اللي حطيته في متغير البيئة API_KEY على السيرفر (إن وجد).
+    // اتركه فارغاً لو ما فعّلت الحماية.
+    API_KEY: ""
 };
 
 if ("serviceWorker" in navigator) {
@@ -453,7 +457,8 @@ async function downloadWithCobalt(url, isAudio, platformName) {
         videoQuality: "max",
         audioFormat: "mp3",
         downloadMode: isAudio ? "audio" : "auto",
-        filenameStyle: "pretty"
+        filenameStyle: "pretty",
+        apiKey: CONFIG.API_KEY || undefined
     };
 
     const data = await fetchJson(endpoint, {
@@ -485,10 +490,11 @@ async function downloadWithCobalt(url, isAudio, platformName) {
             platform: platformName,
             items: data.picker
                 .filter(item => item && item.url)
-                .map((item, index) => ({
-                    url: item.url,
-                    label: `${item.type === "photo" ? "صورة" : "ملف"} ${index + 1}`
-                }))
+                .map((item, index) => {
+                    const labels = { photo: "صورة", video: "فيديو", audio: "صوت" };
+                    const label = labels[item.type] || "ملف";
+                    return { url: item.url, label: `${label} ${index + 1}` };
+                })
         };
     }
 
