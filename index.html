@@ -21,7 +21,7 @@
             align-items: center;
             height: 100vh;
             margin: 0;
-            overflow: hidden; 
+            overflow: hidden;
         }
         .container {
             background: #1a1a2e;
@@ -34,8 +34,8 @@
             border: 1px solid #2a2a4a;
         }
         h2 { color: #e94560; margin-bottom: 5px; font-size: 24px;}
-        p { color: #888; font-size: 13px; margin-bottom: 25px; }
-        input[type="url"] {
+        p { color: #888; font-size: 13px; margin-bottom: 20px; }
+        input[type="url"], select {
             width: 90%;
             padding: 15px;
             margin-bottom: 15px;
@@ -45,9 +45,10 @@
             border-radius: 12px;
             font-size: 15px;
             outline: none;
-            direction: ltr;
         }
+        input[type="url"] { direction: ltr; }
         input::placeholder { color: #555; }
+        select { width: 98%; cursor: pointer; }
         button {
             background-color: #e94560;
             color: white;
@@ -76,6 +77,12 @@
         <p>الكل في واحد: يوتيوب، تيك توك، انستا، إكس</p>
         
         <input type="url" id="mediaLink" placeholder="الصق الرابط هنا..." required>
+        
+        <select id="formatSelect">
+            <option value="video">تحميل كـ (فيديو بأعلى جودة)</option>
+            <option value="audio">تحميل كـ (صوت MP3 فقط)</option>
+        </select>
+
         <button id="actionBtn" onclick="fetchMedia()">تحميل الآن</button>
         
         <div id="status"></div>
@@ -83,13 +90,13 @@
 
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').then(() => {
-                console.log('Service Worker Registered');
-            });
+            navigator.serviceWorker.register('sw.js').catch(err => console.log('SW setup failed'));
         }
 
         async function fetchMedia() {
             let link = document.getElementById('mediaLink').value.trim();
+            const format = document.getElementById('formatSelect').value;
+            const isAudio = format === 'audio';
             const statusDiv = document.getElementById('status');
             const btn = document.getElementById('actionBtn');
             
@@ -100,65 +107,93 @@
                 return;
             }
 
+            // فلترة رابط اليوتيوب إذا كان صوتي عشان نشيل قوائم التشغيل
+            if (link.includes('youtube.com') || link.includes('youtu.be')) {
+                const ytMatch = link.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/);
+                if (ytMatch && ytMatch[1]) link = `https://www.youtube.com/watch?v=${ytMatch[1]}`;
+            }
+
             btn.innerText = "جاري المعالجة...";
             btn.disabled = true;
-            statusDiv.innerHTML = "<span style='color:#ffb86c;'>جاري سحب المقطع... ⏳</span>";
+            statusDiv.innerHTML = "<span style='color:#ffb86c;'>جاري الاتصال بالسيرفرات... ⏳</span>";
 
             try {
-                // إذا كان الرابط تيك توك (نستخدم السيرفر المضمون لتيك توك)
-                if (link.includes('tiktok.com')) {
-                    const response = await fetch(`https://www.tikwm.com/api/?url=${link}`);
+                // نظام خاص لتيك توك يجبره يسحب الـ HD (4K)
+                if (link.includes('tiktok.com') && !isAudio) {
+                    const response = await fetch(`https://www.tikwm.com/api/?url=${link}&hd=1`);
                     const data = await response.json();
-
+                    
                     if (data.code === 0 && data.data) {
-                        statusDiv.innerHTML = "<span style='color:#4caf50;'>تم التجهيز! جاري فتح الملف... 🎉</span>";
-                        window.location.href = data.data.play;
-                    } else {
-                        statusDiv.innerHTML = `<span style='color:#ff5252;'>فشل التحميل، تأكد أن المقطع عام.</span>`;
+                        const hdVideo = data.data.hdplay || data.data.play;
+                        statusDiv.innerHTML = "<span style='color:#4caf50;'>تم سحب الـ HD! جاري التنزيل... 🎬</span>";
+                        window.location.href = hdVideo;
+                        return finishUI(btn, statusDiv, hdVideo);
                     }
-                } 
-                // للمنصات الأخرى (يوتيوب، انستقرام، إكس)
-                else {
-                    // تنظيف رابط اليوتيوب لتفادي مشاكل قوائم التشغيل
-                    const ytMatch = link.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/);
-                    if (ytMatch && (link.includes('youtube') || link.includes('youtu.be'))) {
-                        link = `https://www.youtube.com/watch?v=${ytMatch[1]}`;
+                }
+
+                // نظام متعدد السيرفرات لباقي المنصات لتخطي الحظر (CORS)
+                const cobaltMirrors = [
+                    'https://co.wuk.sh/api/json',
+                    'https://cobalt.owo.vc/api/json',
+                    'https://api.cobalt.tools/api/json'
+                ];
+
+                let successData = null;
+
+                for (let api of cobaltMirrors) {
+                    try {
+                        const response = await fetch(api, {
+                            method: 'POST',
+                            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url: link, vQuality: "max", isAudioOnly: isAudio })
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.url || data.picker) {
+                                successData = data;
+                                break; // إذا نجح الاتصال يوقف الدوران
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('السيرفر عليه ضغط، نجرب اللي بعده...');
                     }
+                }
 
-                    const response = await fetch('https://api.cobalt.tools/api/json', {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            url: link,
-                            vQuality: "max"
-                        })
-                    });
-
-                    const data = await response.json();
-
-                    if (data.url) {
-                        statusDiv.innerHTML = "<span style='color:#4caf50;'>تم التجهيز! جاري التنزيل... 🎉</span>";
-                        window.location.href = data.url;
-                    } else if (data.status === 'picker') {
-                        let html = "<span style='color:#4caf50;'>صور متعددة:</span><br>";
-                        data.picker.forEach((item, index) => {
+                if (successData) {
+                    if (successData.url) {
+                        statusDiv.innerHTML = "<span style='color:#4caf50;'>تم التجهيز! جاري الفتح للحفظ... 🎉</span>";
+                        window.location.href = successData.url;
+                        finishUI(btn, statusDiv, successData.url);
+                    } else if (successData.status === 'picker') {
+                        let html = "<span style='color:#4caf50;'>تم سحب الصور (اضغط مطولاً للحفظ):</span><br>";
+                        successData.picker.forEach((item, index) => {
                             html += `<a href="${item.url}" target="_blank" style="display:block; color:#e94560; margin-top:10px; text-decoration:none;">تحميل صورة ${index + 1}</a>`;
                         });
                         statusDiv.innerHTML = html;
-                    } else {
-                        statusDiv.innerHTML = `<span style='color:#ff5252;'>فشل التحميل من هذا الرابط.</span>`;
+                        btn.innerText = "تحميل الآن";
+                        btn.disabled = false;
                     }
+                } else {
+                    statusDiv.innerHTML = `<span style='color:#ff5252;'>فشل التحميل. السيرفرات عليها ضغط حالياً أو المقطع خاص.</span>`;
                 }
+
             } catch (error) {
-                statusDiv.innerHTML = "<span style='color:#ff5252;'>خطأ أمني بالاتصال. تأكد أنك رافع الملف على استضافة (https) وليس من الكمبيوتر مباشرة.</span>";
-                console.error(error);
+                statusDiv.innerHTML = "<span style='color:#ff5252;'>حدث خطأ في الاتصال.</span>";
             } finally {
+                if(!btn.disabled === false) { // إذا ما تفعل بالدوال اللي فوق
+                    btn.innerText = "تحميل الآن";
+                    btn.disabled = false;
+                }
+            }
+        }
+
+        function finishUI(btn, statusDiv, fallbackUrl) {
+            setTimeout(() => {
                 btn.innerText = "تحميل الآن";
                 btn.disabled = false;
-            }
+                statusDiv.innerHTML = `<span style='color:#888;'>إذا لم يبدأ التحميل، <a href='${fallbackUrl}' target='_blank' style='color:#e94560;'>اضغط هنا</a></span>`;
+            }, 3000);
         }
     </script>
 </body>
