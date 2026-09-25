@@ -574,7 +574,7 @@ async function processLink() {
     } catch (error) {
         console.error(error);
 
-        let message = "حدث خطأ أثناء التحميل.";
+        let message = `حدث خطأ أثناء التحميل: ${escapeHtml(error.message || "غير معروف")}`;
 
         if (String(error.message).includes("Backend/Cobalt")) {
             message =
@@ -582,6 +582,11 @@ async function processLink() {
                  TikTok و X يعملان بموصلاتهما المستقلة، ويمكن إضافة مزود خاص لباقي المنصات.`;
         } else if (error.name === "AbortError") {
             message = "انتهت مهلة الاتصال بالمزود. حاول مرة أخرى.";
+        } else if (error.message === "Failed to fetch") {
+            message =
+                "تعذّر الوصول لسيرفر الـ Backend نهائياً.<br>" +
+                "تأكد أن COBALT_ENDPOINT في الكود مضبوط على رابط سيرفرك الفعلي (وليس القيمة الافتراضية)، " +
+                "وأن السيرفر شغّال ومفعّل عليه CORS.";
         }
 
         setStatus(message, "error");
