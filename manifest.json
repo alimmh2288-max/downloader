@@ -1,0 +1,16 @@
+{
+  "name": "DyReXR Downloader",
+  "short_name": "DyReXR",
+  "description": "أداة تحميل الوسائط الشاملة",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#0f0f1a",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/8191/8191285.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
