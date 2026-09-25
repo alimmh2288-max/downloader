@@ -74,16 +74,16 @@
 
     <div class="container">
         <h2>DyReXR Downloader</h2>
-        <p>الكل في واحد: يوتيوب، تيك توك، انستا، إكس</p>
+        <p>تحميل مباشر وصامت بدون تحويلك لأي موقع</p>
         
         <input type="url" id="mediaLink" placeholder="الصق الرابط هنا..." required>
         
         <select id="formatSelect">
-            <option value="video">تحميل كـ (فيديو بأعلى جودة)</option>
-            <option value="audio">تحميل كـ (صوت MP3 فقط)</option>
+            <option value="video">فيديو (أعلى جودة HD)</option>
+            <option value="audio">صوت فقط (MP3)</option>
         </select>
 
-        <button id="actionBtn" onclick="fetchMedia()">تحميل الآن</button>
+        <button id="actionBtn" onclick="fetchMedia()">تنزيل الملف</button>
         
         <div id="status"></div>
     </div>
@@ -103,97 +103,107 @@
             if (link.startsWith('/')) link = link.substring(1);
 
             if(!link.startsWith('http')) {
-                statusDiv.innerHTML = "<span style='color:#ff5252;'>تأكد من الرابط!</span>";
+                statusDiv.innerHTML = "<span style='color:#ff5252;'>الرابط غير صحيح!</span>";
                 return;
             }
 
-            // فلترة رابط اليوتيوب إذا كان صوتي عشان نشيل قوائم التشغيل
+            // تنظيف روابط اليوتيوب
             if (link.includes('youtube.com') || link.includes('youtu.be')) {
                 const ytMatch = link.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/);
                 if (ytMatch && ytMatch[1]) link = `https://www.youtube.com/watch?v=${ytMatch[1]}`;
             }
 
-            btn.innerText = "جاري المعالجة...";
+            btn.innerText = "جاري سحب الملف...";
             btn.disabled = true;
-            statusDiv.innerHTML = "<span style='color:#ffb86c;'>جاري الاتصال بالسيرفرات... ⏳</span>";
+            statusDiv.innerHTML = "<span style='color:#ffb86c;'>جاري المعالجة... ⏳</span>";
 
             try {
-                // نظام خاص لتيك توك يجبره يسحب الـ HD (4K)
+                // تيك توك: إجبار السيرفر على جودة HD وسحبها كملف مباشر
                 if (link.includes('tiktok.com') && !isAudio) {
                     const response = await fetch(`https://www.tikwm.com/api/?url=${link}&hd=1`);
                     const data = await response.json();
                     
                     if (data.code === 0 && data.data) {
-                        const hdVideo = data.data.hdplay || data.data.play;
-                        statusDiv.innerHTML = "<span style='color:#4caf50;'>تم سحب الـ HD! جاري التنزيل... 🎬</span>";
-                        window.location.href = hdVideo;
-                        return finishUI(btn, statusDiv, hdVideo);
+                        const hdVideo = data.data.hdplay || data.data.play; // أولوية قصوى للـ HD
+                        statusDiv.innerHTML = "<span style='color:#4caf50;'>تم العثور على الجودة الأصلية! جاري التنزيل... 🎬</span>";
+                        await forceDownload(hdVideo, `DyReXR_TikTok_${Date.now()}.mp4`);
+                        statusDiv.innerHTML = "<span style='color:#4caf50;'>تم الحفظ بنجاح! شيك على (الملفات). 🎉</span>";
+                        return resetBtn(btn);
                     }
                 }
 
-                // نظام متعدد السيرفرات لباقي المنصات لتخطي الحظر (CORS)
-                const cobaltMirrors = [
-                    'https://co.wuk.sh/api/json',
-                    'https://cobalt.owo.vc/api/json',
-                    'https://api.cobalt.tools/api/json'
-                ];
+                // باقي المنصات (يوتيوب، إكس، انستا) عبر Cobalt بدون تحويل للموقع
+                const response = await fetch('https://api.cobalt.tools/api/json', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        url: link,
+                        vQuality: "max", // إجبار الجودة العالية
+                        isAudioOnly: isAudio,
+                        aFormat: "mp3"
+                    })
+                });
 
-                let successData = null;
+                const data = await response.json();
 
-                for (let api of cobaltMirrors) {
-                    try {
-                        const response = await fetch(api, {
-                            method: 'POST',
-                            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ url: link, vQuality: "max", isAudioOnly: isAudio })
-                        });
-                        
-                        if (response.ok) {
-                            const data = await response.json();
-                            if (data.url || data.picker) {
-                                successData = data;
-                                break; // إذا نجح الاتصال يوقف الدوران
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('السيرفر عليه ضغط، نجرب اللي بعده...');
-                    }
-                }
-
-                if (successData) {
-                    if (successData.url) {
-                        statusDiv.innerHTML = "<span style='color:#4caf50;'>تم التجهيز! جاري الفتح للحفظ... 🎉</span>";
-                        window.location.href = successData.url;
-                        finishUI(btn, statusDiv, successData.url);
-                    } else if (successData.status === 'picker') {
-                        let html = "<span style='color:#4caf50;'>تم سحب الصور (اضغط مطولاً للحفظ):</span><br>";
-                        successData.picker.forEach((item, index) => {
-                            html += `<a href="${item.url}" target="_blank" style="display:block; color:#e94560; margin-top:10px; text-decoration:none;">تحميل صورة ${index + 1}</a>`;
-                        });
-                        statusDiv.innerHTML = html;
-                        btn.innerText = "تحميل الآن";
-                        btn.disabled = false;
-                    }
+                if (data.url) {
+                    statusDiv.innerHTML = "<span style='color:#4caf50;'>تم تجهيز الملف! جاري التنزيل الصامت... ⏳</span>";
+                    await forceDownload(data.url, `DyReXR_Media_${Date.now()}.${isAudio ? 'mp3' : 'mp4'}`);
+                    statusDiv.innerHTML = "<span style='color:#4caf50;'>تم الحفظ بنجاح! شيك على (الملفات). 🎉</span>";
+                } else if (data.status === 'picker') {
+                    let html = "<span style='color:#4caf50;'>هذا الرابط يحتوي على صور، اضغط عليها للحفظ:</span><br>";
+                    data.picker.forEach((item, index) => {
+                        html += `<a href="${item.url}" target="_blank" style="display:inline-block; margin:5px; padding:8px 12px; background:#4caf50; color:white; border-radius:5px; text-decoration:none;">صورة ${index + 1}</a>`;
+                    });
+                    statusDiv.innerHTML = html;
                 } else {
-                    statusDiv.innerHTML = `<span style='color:#ff5252;'>فشل التحميل. السيرفرات عليها ضغط حالياً أو المقطع خاص.</span>`;
+                    statusDiv.innerHTML = `<span style='color:#ff5252;'>فشل السحب. المقطع قد يكون محمي أو عليه قيود.</span>`;
                 }
 
             } catch (error) {
-                statusDiv.innerHTML = "<span style='color:#ff5252;'>حدث خطأ في الاتصال.</span>";
+                statusDiv.innerHTML = "<span style='color:#ff5252;'>حدث خطأ في الاتصال بالشبكة.</span>";
+                console.error(error);
             } finally {
-                if(!btn.disabled === false) { // إذا ما تفعل بالدوال اللي فوق
-                    btn.innerText = "تحميل الآن";
-                    btn.disabled = false;
-                }
+                resetBtn(btn);
             }
         }
 
-        function finishUI(btn, statusDiv, fallbackUrl) {
-            setTimeout(() => {
-                btn.innerText = "تحميل الآن";
-                btn.disabled = false;
-                statusDiv.innerHTML = `<span style='color:#888;'>إذا لم يبدأ التحميل، <a href='${fallbackUrl}' target='_blank' style='color:#e94560;'>اضغط هنا</a></span>`;
-            }, 3000);
+        // هذه الدالة هي سر الحل: تقوم بتنزيل الملف في الخلفية كـ Blob ولا تسمح للموقع بفتح صفحات جديدة
+        async function forceDownload(url, filename) {
+            try {
+                const response = await fetch(url);
+                if(!response.ok) throw new Error('Network error');
+                const blob = await response.blob();
+                const blobUrl = window.URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = blobUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click(); // ضغطة وهمية للتحميل
+                
+                window.URL.revokeObjectURL(blobUrl);
+                document.body.removeChild(a);
+            } catch (e) {
+                // إذا رفض المتصفح التنزيل المخفي بسبب الحماية، نفتح نافذة تحميل مباشرة بدون تغيير صفحة التطبيق
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                a.target = '_blank'; // مهم جداً عشان ما يخرجك من التطبيق
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        }
+
+        function resetBtn(btn) {
+            btn.innerText = "تنزيل الملف";
+            btn.disabled = false;
         }
     </script>
 </body>
