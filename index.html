@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>DyReXR Media</title>
-    
+
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f0f1a">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,31 +12,51 @@
     <meta name="apple-mobile-web-app-title" content="DyReXR">
 
     <style>
+        * { box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #0f0f1a;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f0f1a;
             color: #fff;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
             overflow: hidden;
         }
+
         .container {
             background: #1a1a2e;
             padding: 35px 25px;
             border-radius: 20px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            box-shadow: 0 10px 40px rgba(0,0,0,.8);
             text-align: center;
             width: 90%;
-            max-width: 400px;
+            max-width: 430px;
             border: 1px solid #2a2a4a;
         }
-        h2 { color: #e94560; margin-bottom: 5px; font-size: 24px;}
-        p { color: #888; font-size: 13px; margin-bottom: 20px; }
+
+        h2 {
+            color: #e94560;
+            margin: 0 0 5px;
+            font-size: 24px;
+        }
+
+        p {
+            color: #888;
+            font-size: 13px;
+            margin: 0 0 20px;
+        }
+
+        .detected {
+            min-height: 22px;
+            color: #aaa;
+            font-size: 12px;
+            margin: -5px 0 12px;
+        }
+
         input[type="url"], select {
-            width: 90%;
+            width: 100%;
             padding: 15px;
             margin-bottom: 15px;
             background: #16213e;
@@ -46,165 +66,594 @@
             font-size: 15px;
             outline: none;
         }
-        input[type="url"] { direction: ltr; }
+
+        input[type="url"] {
+            direction: ltr;
+            text-align: left;
+        }
+
         input::placeholder { color: #555; }
-        select { width: 98%; cursor: pointer; }
+
+        select { cursor: pointer; }
+
         button {
-            background-color: #e94560;
-            color: white;
-            border: none;
+            background: #e94560;
+            color: #fff;
+            border: 0;
             padding: 16px 30px;
             border-radius: 12px;
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
-            transition: 0.3s;
+            transition: .2s;
             width: 100%;
         }
-        button:hover { background-color: #d13050; }
-        button:disabled { background-color: #555; cursor: not-allowed; }
+
+        button:hover { background: #d13050; }
+        button:disabled { background: #555; cursor: not-allowed; }
+
         #status {
             margin-top: 20px;
             font-size: 14px;
-            line-height: 1.6;
+            line-height: 1.7;
+        }
+
+        .download-btn {
+            background: #4caf50;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            display: inline-block;
+            font-weight: bold;
+            margin-top: 15px;
+            border: 2px solid #388e3c;
+        }
+
+        .download-btn:hover { background: #388e3c; }
+
+        .picker {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .picker .download-btn {
+            margin: 0;
+            padding: 9px 13px;
+            font-size: 13px;
+        }
+
+        .error {
+            color: #ff5252;
+        }
+
+        .success {
+            color: #4caf50;
+        }
+
+        .loading {
+            color: #ffb86c;
+        }
+
+        .hint {
+            color: #888;
+            font-size: 11px;
+            display: block;
+            margin-top: 10px;
         }
     </style>
 </head>
+
 <body>
+<div class="container">
+    <h2>DyReXR Smart</h2>
+    <p>نظام التوجيه الذكي: يتعرف على المنصة تلقائياً</p>
 
-    <div class="container">
-        <h2>DyReXR Downloader</h2>
-        <p>تحميل مباشر وصامت بدون تحويلك لأي موقع</p>
-        
-        <input type="url" id="mediaLink" placeholder="الصق الرابط هنا..." required>
-        
-        <select id="formatSelect">
-            <option value="video">فيديو (أعلى جودة HD)</option>
-            <option value="audio">صوت فقط (MP3)</option>
-        </select>
+    <div id="detected" class="detected"></div>
 
-        <button id="actionBtn" onclick="fetchMedia()">تنزيل الملف</button>
-        
-        <div id="status"></div>
-    </div>
+    <input
+        type="url"
+        id="mediaLink"
+        placeholder="الصق الرابط هنا..."
+        autocomplete="off"
+        required
+    >
 
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').catch(err => console.log('SW setup failed'));
+    <select id="formatSelect">
+        <option value="video">فيديو (أعلى جودة)</option>
+        <option value="audio">صوت فقط (MP3)</option>
+    </select>
+
+    <button id="actionBtn" onclick="processLink()">تحليل وسحب الملف</button>
+
+    <div id="status"></div>
+</div>
+
+<script>
+/*
+ * ==========================================================
+ * DyReXR Smart Router
+ * ==========================================================
+ *
+ * الفكرة:
+ * 1) نتعرف على المنصة من الرابط.
+ * 2) نرسل الرابط إلى Adapter الخاص بالمنصة.
+ * 3) كل Adapter يرجع نتيجة موحدة.
+ *
+ * ملاحظة مهمة:
+ * TikTok -> TikWM
+ * X/Twitter -> VXTwitter
+ *
+ * YouTube / Instagram / Facebook:
+ * لا نعتمد على api.cobalt.tools كخدمة عامة مضمونة.
+ * إذا عندك Cobalt خاص بك، ضع عنوانه في COBALT_ENDPOINT.
+ *
+ * مثال:
+ * const COBALT_ENDPOINT = "https://YOUR-DOMAIN/api";
+ *
+ * إذا تركته فارغاً، لن ندّعي أن التحميل يعمل بينما المزود غير متوفر.
+ */
+
+const CONFIG = {
+    // يعمل مع TikWM كما في مشروعك الحالي.
+    TIKTOK_API: "https://www.tikwm.com/api/",
+
+    // VXTwitter API.
+    X_API: "https://api.vxtwitter.com",
+
+    // اختياري: نسخة Cobalt خاصة بك.
+    // مثال: "https://downloader.example.com/api"
+    // اتركه فارغاً إذا لم يكن لديك سيرفر Cobalt.
+    COBALT_ENDPOINT: ""
+};
+
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js")
+        .catch(() => {});
+}
+
+const mediaInput = document.getElementById("mediaLink");
+const formatSelect = document.getElementById("formatSelect");
+const statusDiv = document.getElementById("status");
+const actionBtn = document.getElementById("actionBtn");
+const detectedDiv = document.getElementById("detected");
+
+mediaInput.addEventListener("input", () => {
+    const platform = detectPlatform(mediaInput.value.trim());
+
+    if (platform) {
+        detectedDiv.textContent = `المنصة: ${platform.name}`;
+    } else {
+        detectedDiv.textContent = "";
+    }
+});
+
+function detectPlatform(rawUrl) {
+    try {
+        const url = new URL(normalizeUrl(rawUrl));
+        const host = url.hostname.toLowerCase().replace(/^www\./, "");
+
+        if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
+            return { id: "tiktok", name: "TikTok" };
         }
 
-        async function fetchMedia() {
-            let link = document.getElementById('mediaLink').value.trim();
-            const format = document.getElementById('formatSelect').value;
-            const isAudio = format === 'audio';
-            const statusDiv = document.getElementById('status');
-            const btn = document.getElementById('actionBtn');
-            
-            if (link.startsWith('/')) link = link.substring(1);
-
-            if(!link.startsWith('http')) {
-                statusDiv.innerHTML = "<span style='color:#ff5252;'>الرابط غير صحيح!</span>";
-                return;
-            }
-
-            // تنظيف روابط اليوتيوب
-            if (link.includes('youtube.com') || link.includes('youtu.be')) {
-                const ytMatch = link.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/);
-                if (ytMatch && ytMatch[1]) link = `https://www.youtube.com/watch?v=${ytMatch[1]}`;
-            }
-
-            btn.innerText = "جاري سحب الملف...";
-            btn.disabled = true;
-            statusDiv.innerHTML = "<span style='color:#ffb86c;'>جاري المعالجة... ⏳</span>";
-
-            try {
-                // تيك توك: إجبار السيرفر على جودة HD وسحبها كملف مباشر
-                if (link.includes('tiktok.com') && !isAudio) {
-                    const response = await fetch(`https://www.tikwm.com/api/?url=${link}&hd=1`);
-                    const data = await response.json();
-                    
-                    if (data.code === 0 && data.data) {
-                        const hdVideo = data.data.hdplay || data.data.play; // أولوية قصوى للـ HD
-                        statusDiv.innerHTML = "<span style='color:#4caf50;'>تم العثور على الجودة الأصلية! جاري التنزيل... 🎬</span>";
-                        await forceDownload(hdVideo, `DyReXR_TikTok_${Date.now()}.mp4`);
-                        statusDiv.innerHTML = "<span style='color:#4caf50;'>تم الحفظ بنجاح! شيك على (الملفات). 🎉</span>";
-                        return resetBtn(btn);
-                    }
-                }
-
-                // باقي المنصات (يوتيوب، إكس، انستا) عبر Cobalt بدون تحويل للموقع
-                const response = await fetch('https://api.cobalt.tools/api/json', {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        url: link,
-                        vQuality: "max", // إجبار الجودة العالية
-                        isAudioOnly: isAudio,
-                        aFormat: "mp3"
-                    })
-                });
-
-                const data = await response.json();
-
-                if (data.url) {
-                    statusDiv.innerHTML = "<span style='color:#4caf50;'>تم تجهيز الملف! جاري التنزيل الصامت... ⏳</span>";
-                    await forceDownload(data.url, `DyReXR_Media_${Date.now()}.${isAudio ? 'mp3' : 'mp4'}`);
-                    statusDiv.innerHTML = "<span style='color:#4caf50;'>تم الحفظ بنجاح! شيك على (الملفات). 🎉</span>";
-                } else if (data.status === 'picker') {
-                    let html = "<span style='color:#4caf50;'>هذا الرابط يحتوي على صور، اضغط عليها للحفظ:</span><br>";
-                    data.picker.forEach((item, index) => {
-                        html += `<a href="${item.url}" target="_blank" style="display:inline-block; margin:5px; padding:8px 12px; background:#4caf50; color:white; border-radius:5px; text-decoration:none;">صورة ${index + 1}</a>`;
-                    });
-                    statusDiv.innerHTML = html;
-                } else {
-                    statusDiv.innerHTML = `<span style='color:#ff5252;'>فشل السحب. المقطع قد يكون محمي أو عليه قيود.</span>`;
-                }
-
-            } catch (error) {
-                statusDiv.innerHTML = "<span style='color:#ff5252;'>حدث خطأ في الاتصال بالشبكة.</span>";
-                console.error(error);
-            } finally {
-                resetBtn(btn);
-            }
+        if (
+            host === "x.com" ||
+            host.endsWith(".x.com") ||
+            host === "twitter.com" ||
+            host.endsWith(".twitter.com")
+        ) {
+            return { id: "x", name: "X / Twitter" };
         }
 
-        // هذه الدالة هي سر الحل: تقوم بتنزيل الملف في الخلفية كـ Blob ولا تسمح للموقع بفتح صفحات جديدة
-        async function forceDownload(url, filename) {
-            try {
-                const response = await fetch(url);
-                if(!response.ok) throw new Error('Network error');
-                const blob = await response.blob();
-                const blobUrl = window.URL.createObjectURL(blob);
-                
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = blobUrl;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click(); // ضغطة وهمية للتحميل
-                
-                window.URL.revokeObjectURL(blobUrl);
-                document.body.removeChild(a);
-            } catch (e) {
-                // إذا رفض المتصفح التنزيل المخفي بسبب الحماية، نفتح نافذة تحميل مباشرة بدون تغيير صفحة التطبيق
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = filename;
-                a.target = '_blank'; // مهم جداً عشان ما يخرجك من التطبيق
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            }
+        if (
+            host === "youtube.com" ||
+            host === "youtu.be" ||
+            host.endsWith(".youtube.com")
+        ) {
+            return { id: "youtube", name: "YouTube" };
         }
 
-        function resetBtn(btn) {
-            btn.innerText = "تنزيل الملف";
-            btn.disabled = false;
+        if (
+            host === "instagram.com" ||
+            host.endsWith(".instagram.com")
+        ) {
+            return { id: "instagram", name: "Instagram" };
         }
-    </script>
+
+        if (
+            host === "facebook.com" ||
+            host === "fb.watch" ||
+            host.endsWith(".facebook.com")
+        ) {
+            return { id: "facebook", name: "Facebook" };
+        }
+
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+function normalizeUrl(value) {
+    let url = value.trim();
+
+    if (url.startsWith("/")) {
+        url = url.substring(1);
+    }
+
+    if (!/^https?:\/\//i.test(url)) {
+        url = "https://" + url;
+    }
+
+    return url;
+}
+
+function setStatus(message, type = "") {
+    statusDiv.innerHTML = `<span class="${type}">${message}</span>`;
+}
+
+function setLoading(text) {
+    actionBtn.innerText = text;
+    actionBtn.disabled = true;
+}
+
+function resetButton() {
+    actionBtn.innerText = "تحليل وسحب الملف";
+    actionBtn.disabled = false;
+}
+
+async function fetchJson(url, options = {}, timeout = 25000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+
+        const text = await response.text();
+
+        let data = null;
+        try {
+            data = JSON.parse(text);
+        } catch {
+            data = null;
+        }
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        return data;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/* =========================
+   TikTok Adapter
+   ========================= */
+
+async function downloadTikTok(url, isAudio) {
+    const endpoint =
+        `${CONFIG.TIKTOK_API}?url=${encodeURIComponent(url)}&hd=1`;
+
+    const data = await fetchJson(endpoint);
+
+    if (!data || data.code !== 0 || !data.data) {
+        throw new Error("TikTok provider did not return media");
+    }
+
+    const fileUrl = isAudio
+        ? data.data.music
+        : (data.data.hdplay || data.data.play);
+
+    if (!fileUrl) {
+        throw new Error("TikTok media URL not found");
+    }
+
+    return {
+        type: "single",
+        url: fileUrl,
+        platform: "تيك توك"
+    };
+}
+
+/* =========================
+   X / Twitter Adapter
+   ========================= */
+
+function extractXStatus(url) {
+    const match = url.match(
+        /(?:x\.com|twitter\.com)\/([^/?#]+)\/status(?:es)?\/(\d+)/i
+    );
+
+    if (!match) return null;
+
+    return {
+        username: match[1],
+        id: match[2]
+    };
+}
+
+async function downloadX(url, isAudio) {
+    const info = extractXStatus(url);
+
+    if (!info) {
+        throw new Error("لم أستطع قراءة رقم منشور X");
+    }
+
+    if (isAudio) {
+        // VXTwitter يعيد روابط الوسائط؛ إذا كانت فيديو نستخدم الرابط نفسه.
+        // تحويل MP3 يحتاج Backend/مزود تحويل صوت، لذلك لا نخترع ملف MP3.
+    }
+
+    const endpoint =
+        `${CONFIG.X_API}/${encodeURIComponent(info.username)}/status/${info.id}`;
+
+    const data = await fetchJson(endpoint);
+
+    if (!data) {
+        throw new Error("X provider returned no data");
+    }
+
+    const media = Array.isArray(data.media_extended)
+        ? data.media_extended
+        : [];
+
+    const videos = media.filter(item => item && item.type === "video");
+
+    if (videos.length) {
+        return {
+            type: "picker",
+            platform: "إكس",
+            items: videos.map((item, index) => ({
+                url: item.url,
+                label: `فيديو ${index + 1}`
+            }))
+        };
+    }
+
+    const images = media.filter(item => item && item.type === "image");
+
+    if (images.length) {
+        return {
+            type: "picker",
+            platform: "إكس",
+            items: images.map((item, index) => ({
+                url: item.url,
+                label: `صورة ${index + 1}`
+            }))
+        };
+    }
+
+    throw new Error("لم يتم العثور على وسائط في منشور X");
+}
+
+/* =========================
+   Cobalt Adapter
+   ========================= */
+
+async function downloadWithCobalt(url, isAudio, platformName) {
+    if (!CONFIG.COBALT_ENDPOINT) {
+        throw new Error(
+            `${platformName}: يحتاج مزود Backend/Cobalt خاص`
+        );
+    }
+
+    const endpoint = CONFIG.COBALT_ENDPOINT.replace(/\/+$/, "");
+
+    const body = {
+        url,
+        videoQuality: "max",
+        audioFormat: "mp3",
+        downloadMode: isAudio ? "audio" : "auto",
+        filenameStyle: "pretty"
+    };
+
+    const data = await fetchJson(endpoint, {
+        method: "POST",
+        headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!data) {
+        throw new Error(`${platformName}: لا توجد استجابة من المزود`);
+    }
+
+    if (data.status === "tunnel" || data.status === "redirect" || data.status === "stream" || data.status === "success") {
+        if (data.url) {
+            return {
+                type: "single",
+                url: data.url,
+                platform: platformName
+            };
+        }
+    }
+
+    if (data.status === "picker" && Array.isArray(data.picker)) {
+        return {
+            type: "picker",
+            platform: platformName,
+            items: data.picker
+                .filter(item => item && item.url)
+                .map((item, index) => ({
+                    url: item.url,
+                    label: `${item.type === "photo" ? "صورة" : "ملف"} ${index + 1}`
+                }))
+        };
+    }
+
+    throw new Error(`${platformName}: المزود لم يعثر على ملف`);
+}
+
+/* =========================
+   Main Router
+   ========================= */
+
+async function processLink() {
+    const raw = mediaInput.value.trim();
+    const isAudio = formatSelect.value === "audio";
+
+    if (!raw) {
+        setStatus("الصق الرابط أولاً!", "error");
+        return;
+    }
+
+    let link;
+
+    try {
+        link = normalizeUrl(raw);
+        new URL(link);
+    } catch {
+        setStatus("تأكد من الرابط!", "error");
+        return;
+    }
+
+    const platform = detectPlatform(link);
+
+    if (!platform) {
+        setStatus("هذه المنصة غير مدعومة حالياً.", "error");
+        return;
+    }
+
+    detectedDiv.textContent = `المنصة: ${platform.name}`;
+
+    setLoading("جاري تحليل الرابط...");
+    setStatus("جاري الاتصال بالمزود المناسب... ⏳", "loading");
+
+    try {
+        let result;
+
+        switch (platform.id) {
+            case "tiktok":
+                setStatus("تم التعرف: TikTok — جاري سحب HD... ⏳", "loading");
+                result = await downloadTikTok(link, isAudio);
+                break;
+
+            case "x":
+                setStatus("تم التعرف: X — جاري البحث عن الوسائط... ⏳", "loading");
+                result = await downloadX(link, isAudio);
+                break;
+
+            case "youtube":
+                setStatus("تم التعرف: YouTube — جاري المعالجة... ⏳", "loading");
+                result = await downloadWithCobalt(link, isAudio, "يوتيوب");
+                break;
+
+            case "instagram":
+                setStatus("تم التعرف: Instagram — جاري المعالجة... ⏳", "loading");
+                result = await downloadWithCobalt(link, isAudio, "إنستغرام");
+                break;
+
+            case "facebook":
+                setStatus("تم التعرف: Facebook — جاري المعالجة... ⏳", "loading");
+                result = await downloadWithCobalt(link, isAudio, "فيسبوك");
+                break;
+
+            default:
+                throw new Error("Unsupported platform");
+        }
+
+        renderResult(result);
+
+    } catch (error) {
+        console.error(error);
+
+        let message = "حدث خطأ أثناء التحميل.";
+
+        if (String(error.message).includes("Backend/Cobalt")) {
+            message =
+                `هذه المنصة تحتاج مزود تحميل Backend خاص.<br>
+                 TikTok و X يعملان بموصلاتهما المستقلة، ويمكن إضافة مزود خاص لباقي المنصات.`;
+        } else if (error.name === "AbortError") {
+            message = "انتهت مهلة الاتصال بالمزود. حاول مرة أخرى.";
+        }
+
+        setStatus(message, "error");
+    } finally {
+        resetButton();
+    }
+}
+
+function renderResult(result) {
+    if (!result) {
+        throw new Error("Empty result");
+    }
+
+    if (result.type === "single" && result.url) {
+        showDownloadButton(result.url, result.platform);
+        return;
+    }
+
+    if (result.type === "picker" && Array.isArray(result.items)) {
+        const validItems = result.items.filter(item => item && item.url);
+
+        if (!validItems.length) {
+            throw new Error("No picker items");
+        }
+
+        let html =
+            `<span class="success">تم العثور على الوسائط من ${escapeHtml(result.platform)}:</span>
+             <div class="picker">`;
+
+        validItems.forEach((item, index) => {
+            html += `
+                <a
+                    href="${escapeAttr(item.url)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="download-btn"
+                >📥 ${escapeHtml(item.label || `ملف ${index + 1}`)}</a>`;
+        });
+
+        html += "</div>";
+
+        statusDiv.innerHTML = html;
+        return;
+    }
+
+    throw new Error("Unknown result type");
+}
+
+function showDownloadButton(url, platform) {
+    statusDiv.innerHTML = `
+        <span class="success">
+            تم تجهيز الملف من ${escapeHtml(platform)} بنجاح! 🎉
+        </span>
+        <br>
+        <a
+            href="${escapeAttr(url)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="download-btn"
+        >📥 اضغط هنا لحفظ الملف</a>
+        <span class="hint">
+            إذا فتح المقطع في صفحة جديدة، اختر "تنزيل" أو استخدم "المشاركة → حفظ في الملفات" على الآيفون.
+        </span>
+    `;
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function escapeAttr(value) {
+    return escapeHtml(value);
+}
+</script>
 </body>
 </html>
