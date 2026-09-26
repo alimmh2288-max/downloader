@@ -310,19 +310,6 @@ function resetButton() {
     actionBtn.disabled = false;
 }
 
-function buildProxyUrl(rawUrl, filename) {
-    if (!CONFIG.COBALT_ENDPOINT) return rawUrl; // بدون سيرفر خاص، نرجع الرابط الأصلي كما هو
-
-    const base = CONFIG.COBALT_ENDPOINT.replace(/\/api\/?$/, "");
-    const params = new URLSearchParams({ url: rawUrl, filename });
-
-    if (CONFIG.API_KEY) {
-        params.set("apiKey", CONFIG.API_KEY);
-    }
-
-    return `${base}/proxy?${params.toString()}`;
-}
-
 async function fetchJson(url, options = {}, timeout = 25000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
@@ -376,7 +363,7 @@ async function downloadTikTok(url, isAudio) {
 
     return {
         type: "single",
-        url: buildProxyUrl(fileUrl, isAudio ? "tiktok_audio.mp3" : "tiktok_video.mp4"),
+        url: fileUrl,
         platform: "تيك توك"
     };
 }
@@ -430,7 +417,7 @@ async function downloadX(url, isAudio) {
             type: "picker",
             platform: "إكس",
             items: videos.map((item, index) => ({
-                url: buildProxyUrl(item.url, `x_video_${index + 1}.mp4`),
+                url: item.url,
                 label: `فيديو ${index + 1}`
             }))
         };
@@ -443,7 +430,7 @@ async function downloadX(url, isAudio) {
             type: "picker",
             platform: "إكس",
             items: images.map((item, index) => ({
-                url: buildProxyUrl(item.url, `x_photo_${index + 1}.jpg`),
+                url: item.url,
                 label: `صورة ${index + 1}`
             }))
         };
@@ -587,7 +574,7 @@ async function processLink() {
     } catch (error) {
         console.error(error);
 
-        let message = `حدث خطأ أثناء التحميل: ${escapeHtml(error.message || "غير معروف")}`;
+        let message = "حدث خطأ أثناء التحميل.";
 
         if (String(error.message).includes("Backend/Cobalt")) {
             message =
@@ -595,11 +582,6 @@ async function processLink() {
                  TikTok و X يعملان بموصلاتهما المستقلة، ويمكن إضافة مزود خاص لباقي المنصات.`;
         } else if (error.name === "AbortError") {
             message = "انتهت مهلة الاتصال بالمزود. حاول مرة أخرى.";
-        } else if (error.message === "Failed to fetch") {
-            message =
-                "تعذّر الوصول لسيرفر الـ Backend نهائياً.<br>" +
-                "تأكد أن COBALT_ENDPOINT في الكود مضبوط على رابط سيرفرك الفعلي (وليس القيمة الافتراضية)، " +
-                "وأن السيرفر شغّال ومفعّل عليه CORS.";
         }
 
         setStatus(message, "error");
