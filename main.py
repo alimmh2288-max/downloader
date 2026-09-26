@@ -44,6 +44,10 @@ API_KEY = os.environ.get("API_KEY", "")
 DOWNLOAD_DIR = os.path.join(os.getcwd(), "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+# ملف كوكيز اختياري لتجاوز رسالة يوتيوب "Sign in to confirm you're not a bot".
+# إذا رفعت الملف كـ Secret File باسم cookies.txt في Render، بيُقرأ تلقائيًا من هنا.
+COOKIES_PATH = "/etc/secrets/cookies.txt"
+
 # أقصى عمر للملف المؤقت بالثواني (تنظيف تلقائي حتى لو ما تحمل المستخدم الملف)
 MAX_FILE_AGE_SECONDS = 30 * 60  # 30 دقيقة
 
@@ -126,6 +130,9 @@ def resolve(payload: DownloadRequest, background_tasks: BackgroundTasks):
             "preferredcodec": "mp3",
             "preferredquality": "192",
         }]
+
+    if os.path.exists(COOKIES_PATH):
+        ydl_opts["cookiefile"] = COOKIES_PATH
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
