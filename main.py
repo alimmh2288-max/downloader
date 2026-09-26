@@ -20,9 +20,10 @@ import threading
 import time
 
 import yt_dlp
+import httpx
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO)
@@ -201,3 +202,40 @@ def get_file(token: str, background_tasks: BackgroundTasks):
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+# =========================================================
+# بروكسي التحميل الإجباري
+# =========================================================
+# يستخدمه الفرونت إند لـ TikTok وX تحديداً، لأن روابطهم تشير لسيرفرات
+# خارجية (tikwm.com / twimg.com)، والمتصفحات (خصوصاً Safari على آيفون)
+# ترفض إجبار التحميل على ملف من نطاق مختلف عن نطاق الصفحة، فتفتحه
+# بمشغّل الفيديو بدل ما تحفظه. هذا المسار يمرر الملف عبر نطاقنا نحن
+# ويضيف هيدر Content-Disposition: attachment الذي يجبر أي متصفح
+# (آيفون أو أندرويد أو ديسكتوب) يسوي "حفظ" تلقائي بدون تدخل يدوي.
+
+ALLOWED_PROXY_HOSTS = None  # None = بدون قيود؛ عدّلها لقائمة نطاقات محددة لمزيد من الأمان
+
+@app.get("/proxy")
+async def proxy_download(url: str, filename: str = "media.mp4", apiKey: str | None = None):
+    if API_KEY and apiKey != API_KEY:
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    safe_filename = os.path.basename(filename) or "media"
+
+    async def relay():
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+                async with client.stream("GET", url) as upstream:
+                    if upstream.status_code >= 400:
+                        raise HTTPException(status_code=502, detail="upstream_error")
+                    async for chunk in upstream.aiter_bytes(65536):
+                        yield chunk
+        except httpx.HTTPError as e:
+            log.warning("proxy relay failed: %s", e)
+
+    return StreamingResponse(
+        relay(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
