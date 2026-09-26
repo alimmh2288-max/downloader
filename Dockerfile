@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# ffmpeg مطلوب لدمج الفيديو+الصوت ولتحويل الصوت إلى MP3
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
