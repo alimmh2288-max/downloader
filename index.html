@@ -207,11 +207,11 @@ const CONFIG = {
     // نسخة Cobalt الخاصة بك (السيرفر اللي راح تنشره من مجلد backend/).
     // بعد النشر غيّر هذا الرابط لدومين سيرفرك الفعلي، بدون / في النهاية.
     // مثال: "https://dyrexr-api.onrender.com/api"
-    COBALT_ENDPOINT: "https://downloader-6nmd.onrender.com/api",
+    COBALT_ENDPOINT: "https://YOUR-DOMAIN.example.com/api",
 
     // نفس المفتاح اللي حطيته في متغير البيئة API_KEY على السيرفر (إن وجد).
     // اتركه فارغاً لو ما فعّلت الحماية.
-    API_KEY: "dyrexr2026secret"
+    API_KEY: ""
 };
 
 if ("serviceWorker" in navigator) {
@@ -310,6 +310,19 @@ function resetButton() {
     actionBtn.disabled = false;
 }
 
+function buildProxyUrl(rawUrl, filename) {
+    if (!CONFIG.COBALT_ENDPOINT) return rawUrl; // بدون سيرفر خاص، نرجع الرابط الأصلي كما هو
+
+    const base = CONFIG.COBALT_ENDPOINT.replace(/\/api\/?$/, "");
+    const params = new URLSearchParams({ url: rawUrl, filename });
+
+    if (CONFIG.API_KEY) {
+        params.set("apiKey", CONFIG.API_KEY);
+    }
+
+    return `${base}/proxy?${params.toString()}`;
+}
+
 async function fetchJson(url, options = {}, timeout = 25000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
@@ -363,7 +376,7 @@ async function downloadTikTok(url, isAudio) {
 
     return {
         type: "single",
-        url: fileUrl,
+        url: buildProxyUrl(fileUrl, isAudio ? "tiktok_audio.mp3" : "tiktok_video.mp4"),
         platform: "تيك توك"
     };
 }
@@ -417,7 +430,7 @@ async function downloadX(url, isAudio) {
             type: "picker",
             platform: "إكس",
             items: videos.map((item, index) => ({
-                url: item.url,
+                url: buildProxyUrl(item.url, `x_video_${index + 1}.mp4`),
                 label: `فيديو ${index + 1}`
             }))
         };
@@ -430,7 +443,7 @@ async function downloadX(url, isAudio) {
             type: "picker",
             platform: "إكس",
             items: images.map((item, index) => ({
-                url: item.url,
+                url: buildProxyUrl(item.url, `x_photo_${index + 1}.jpg`),
                 label: `صورة ${index + 1}`
             }))
         };
